@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    ports:
+      - "5434:5432"
+  init_db:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: bash -c "airflow db init && airflow db upgrade"
+    env_file: .env
+    depends_on:
+      - postgres
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: on-failure
+    command:  bash -c "airflow scheduler"
+    env_file: .env
+    depends_on:
+      - postgres
+    ports:
+      - "8080:8793"
+    volumes:
+      - ./airflow_dags:/opt/airflow/dags
+      - ./airflow_logs:/opt/airflow/logs
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+  webserver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: webserver
+    restart: always
+    env_file: .env
+    depends_on:
+      - postgres
+    command: bash -c "airflow users create -r Admin -u admin -e admin@example.com -f admin -l user -p admin && airflow webserver"
+    volumes:
+      - ./airflow_dags:/opt/airflow/dags
+      - ./airflow_logs:/opt/airflow/logs
+    ports:
+      - "5000:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+      interval: 30s
+      timeout: 30s
+      retries: 32
